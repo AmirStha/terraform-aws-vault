@@ -352,10 +352,16 @@ function generate_systemd_config {
   local vault_description="HashiCorp Vault - A tool for managing secrets"
   local vault_command="server"
   local vault_config_file_or_dir="$vault_config_dir"  # Vault agent requires single file, but server can accept config dir.
+  local vault_ambient_capabilities="CAP_IPC_LOCK"
+  local vault_capabilities="CAP_IPC_LOCK+ep"
+  local vault_capability_bounding_set="CAP_SYSLOG CAP_IPC_LOCK"
   if [[ "$is_vault_agent" == "true" ]]; then
     vault_command="agent"
     vault_description="HashiCorp Vault Agent"
     vault_config_file_or_dir="$config_path"
+    vault_ambient_capabilities+=" CAP_KILL"
+    vault_capabilities+=" CAP_KILL+ep"
+    vault_capability_bounding_set+=" CAP_KILL"
   fi
 
   log_info "Creating systemd config file to run Vault in $systemd_config_path"
@@ -380,9 +386,9 @@ ProtectHome=read-only
 PrivateTmp=yes
 PrivateDevices=yes
 SecureBits=keep-caps
-AmbientCapabilities=CAP_IPC_LOCK
-Capabilities=CAP_IPC_LOCK+ep
-CapabilityBoundingSet=CAP_SYSLOG CAP_IPC_LOCK
+AmbientCapabilities=$vault_ambient_capabilities
+Capabilities=$vault_capabilities
+CapabilityBoundingSet=$vault_capability_bounding_set
 NoNewPrivileges=yes
 ExecStart=$vault_bin_dir/vault $vault_command -config $vault_config_file_or_dir -log-level=$vault_log_level
 ExecReload=/bin/kill --signal HUP \$MAINPID
