@@ -59,13 +59,13 @@ variable "auto_unseal_kms_key_arn" {
 variable "subnet_ids" {
   description = "The subnet IDs into which the EC2 Instances should be deployed. You should typically pass in one subnet ID per node in the cluster_size variable. We strongly recommend that you run Vault in private subnets. At least one of var.subnet_ids or var.availability_zones must be non-empty."
   type        = list(string)
-  default     = []
+  default     = null
 }
 
 variable "availability_zones" {
   description = "The availability zones into which the EC2 Instances should be deployed. You should typically pass in one availability zone per node in the cluster_size variable. We strongly recommend against passing in only a list of availability zones, as that will run Vault in the default (and most likely public) subnets in your VPC. At least one of var.subnet_ids or var.availability_zones must be non-empty."
   type        = list(string)
-  default     = []
+  default     = null
 }
 
 variable "ssh_key_name" {
@@ -235,4 +235,10 @@ variable "dynamo_table_region" {
   description = "Table region used for the instance policy. Uses the current region if not supplied. Global tables should use `*` to allow for a cross region deployment to write to their respective table"
   type        = string
   default     = ""
+}
+
+variable "iam_permissions_boundary" {
+  description = "If set, restricts the created IAM role to the given permissions boundary"
+  type        = string
+  default     = null
 }

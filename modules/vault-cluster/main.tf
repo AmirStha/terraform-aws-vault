@@ -1,9 +1,11 @@
 # ----------------------------------------------------------------------------------------------------------------------
 # REQUIRE A SPECIFIC TERRAFORM VERSION OR HIGHER
-# This module has been updated with 0.12 syntax, which means it is no longer compatible with any versions below 0.12.
 # ----------------------------------------------------------------------------------------------------------------------
 terraform {
-  required_version = ">= 0.12"
+  # This module is now only being tested with Terraform 1.0.x. However, to make upgrading easier, we are setting
+  # 0.12.26 as the minimum version, as that version added support for required_providers with source URLs, making it
+  # forwards compatible with 1.0.x code.
+  required_version = ">= 0.12.26"
 }
 
 data "aws_region" "current" {}
@@ -84,11 +86,21 @@ resource "aws_autoscaling_group" "autoscaling_group" {
   }
 
 
-  # aws_launch_configuration.launch_configuration in this module sets create_before_destroy to true, which means
-  # everything it depends on, including this resource, must set it as well, or you'll get cyclic dependency errors
-  # when you try to do a terraform destroy.
   lifecycle {
+    # aws_launch_configuration.launch_configuration in this module sets create_before_destroy to true, which means
+    # everything it depends on, including this resource, must set it as well, or you'll get cyclic dependency errors
+    # when you try to do a terraform destroy.
     create_before_destroy = true
+
+    # As of AWS Provider 3.x, inline load_balancers and target_group_arns
+    # in an aws_autoscaling_group take precedence over attachment resources.
+    # Since the vault-cluster module does not define any Load Balancers,
+    # it's safe to assume that we will always want to favor an attachment
+    # over these inline properties.
+    #
+    # For further discussion and links to relevant documentation, see
+    # https://github.com/hashicorp/terraform-aws-vault/issues/210
+    ignore_changes = [load_balancers, target_group_arns]
   }
 }
 
@@ -234,6 +246,8 @@ resource "aws_iam_role" "instance_role" {
   name_prefix        = var.cluster_name
   assume_role_policy = data.aws_iam_policy_document.instance_role.json
 
+  permissions_boundary = var.iam_permissions_boundary
+
   # aws_iam_instance_profile.instance_profile in this module sets create_before_destroy to true, which means
   # everything it depends on, including this resource, must set it as well, or you'll get cyclic dependency errors
   # when you try to do a terraform destroy.
@@ -343,9 +357,9 @@ data "aws_iam_policy_document" "vault_dynamo" {
 }
 
 resource "aws_iam_role_policy" "vault_dynamo" {
-  count  = var.enable_dynamo_backend ? 1 : 0
-  name   = "vault_dynamo"
-  role   = aws_iam_role.instance_role.id
+  count = var.enable_dynamo_backend ? 1 : 0
+  name  = "vault_dynamo"
+  role  = aws_iam_role.instance_role.id
   policy = element(
     concat(data.aws_iam_policy_document.vault_dynamo.*.json, [""]),
     0,

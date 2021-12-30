@@ -89,6 +89,7 @@ func TestMainVaultCluster(t *testing.T) {
 
 	// os.Setenv("SKIP_setup_amis", "true")
 	// os.Setenv("SKIP_deploy", "true")
+	// os.Setenv("SKIP_initialize_unseal", "true")
 	// os.Setenv("SKIP_validate", "true")
 	// os.Setenv("SKIP_log", "true")
 	// os.Setenv("SKIP_teardown", "true")
@@ -100,8 +101,8 @@ func TestMainVaultCluster(t *testing.T) {
 
 		amisPackerOptions := map[string]*packer.Options{}
 		for _, ami := range amisData {
-			// Exclude eu-north-1 as it is missing the instance types we use
-			awsRegion := aws.GetRandomRegion(t, nil, []string{"eu-north-1"})
+			// Exclude a few regions as they are missing the instance types we use
+			awsRegion := aws.GetRandomRegion(t, nil, []string{"eu-north-1", "ca-central-1", "ap-northeast-2", "ap-northeast-3"})
 
 			test_structure.SaveString(t, WORK_DIR, fmt.Sprintf("awsRegion-%s", ami.Name), awsRegion)
 

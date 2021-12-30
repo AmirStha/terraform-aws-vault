@@ -1,13 +1,15 @@
 # ----------------------------------------------------------------------------------------------------------------------
 # REQUIRE A SPECIFIC TERRAFORM VERSION OR HIGHER
-# This module has been updated with 0.12 syntax, which means it is no longer compatible with any versions below 0.12.
 # ----------------------------------------------------------------------------------------------------------------------
 terraform {
-  required_version = ">= 0.12"
+  # This module is now only being tested with Terraform 1.0.x. However, to make upgrading easier, we are setting
+  # 0.12.26 as the minimum version, as that version added support for required_providers with source URLs, making it
+  # forwards compatible with 1.0.x code.
+  required_version = ">= 0.12.26"
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# DEPLOY THE VAULT SERVER CLUSTER
+# DEPLOY THE DYNAMODB STORAGE BACKEND
 # ---------------------------------------------------------------------------------------------------------------------
 
 module "backend" {
@@ -16,6 +18,10 @@ module "backend" {
   read_capacity  = var.dynamo_read_capacity
   write_capacity = var.dynamo_write_capacity
 }
+
+# ---------------------------------------------------------------------------------------------------------------------
+# DEPLOY THE VAULT SERVER CLUSTER
+# ---------------------------------------------------------------------------------------------------------------------
 
 module "vault_cluster" {
   # When using these modules in your own templates, you will need to use a Git URL with a ref attribute that pins you
@@ -30,6 +36,11 @@ module "vault_cluster" {
   ami_id    = var.ami_id
   user_data = data.template_file.user_data_vault_cluster.rendered
 
+  # Enable S3 storage backend
+  enable_s3_backend       = true
+  s3_bucket_name          = var.s3_bucket_name
+  force_destroy_s3_bucket = var.force_destroy_s3_bucket
+
   vpc_id     = data.aws_vpc.default.id
   subnet_ids = data.aws_subnet_ids.default.ids
 
@@ -42,9 +53,15 @@ module "vault_cluster" {
   allowed_inbound_security_group_count = 0
   ssh_key_name                         = var.ssh_key_name
 
+  # Enable DynamoDB high availability storage backend
   enable_dynamo_backend = true
-  dynamo_table_name = var.dynamo_table_name
+  dynamo_table_name     = var.dynamo_table_name
 }
+
+# ---------------------------------------------------------------------------------------------------------------------
+# THE USER DATA SCRIPT THAT WILL RUN ON EACH VAULT SERVER WHEN IT'S BOOTING
+# This script will configure and start Vault
+# ---------------------------------------------------------------------------------------------------------------------
 
 data "template_file" "user_data_vault_cluster" {
   template = file("${path.module}/user-data-vault.sh")
@@ -52,6 +69,7 @@ data "template_file" "user_data_vault_cluster" {
   vars = {
     aws_region        = data.aws_region.current.name
     dynamo_table_name = var.dynamo_table_name
+    s3_bucket_name    = var.s3_bucket_name
   }
 }
 
