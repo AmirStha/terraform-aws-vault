@@ -14,6 +14,8 @@ readonly DEFAULT_AGENT_AUTH_MOUNT_PATH="auth/aws"
 readonly DEFAULT_PORT=8200
 readonly DEFAULT_LOG_LEVEL="info"
 
+readonly DEFAULT_CONSUL_AGENT_SERVICE_REGISTRATION_ADDRESS="localhost:8500"
+
 readonly EC2_INSTANCE_METADATA_URL="http://169.254.169.254/latest/meta-data"
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,6 +36,7 @@ function print_usage {
   echo -e "  --api-addr\t\tThe full address to use for Client Redirection when running Vault in HA mode. Defaults to \"https://[instance_ip]:$DEFAULT_PORT\". Optional."
   echo -e "  --config-dir\t\tThe path to the Vault config folder. Optional. Default is the absolute path of '../config', relative to this script."
   echo -e "  --bin-dir\t\tThe path to the folder with Vault binary. Optional. Default is the absolute path of the parent folder of this script."
+  echo -e "  --data-dir\t\tThe path to the Vault data folder. Optional. Default is the absolute path of '../data', relative to this script."
   echo -e "  --log-level\t\tThe log verbosity to use with Vault. Optional. Default is $DEFAULT_LOG_LEVEL."
   echo -e "  --systemd-stdout\t\tThe StandardOutput option of the systemd unit.  Optional.  If not configured, uses systemd's default (journal)."
   echo -e "  --systemd-stderr\t\tThe StandardError option of the systemd unit.  Optional.  If not configured, uses systemd's default (inherit)."
@@ -43,6 +46,7 @@ function print_usage {
   echo -e "  --s3-bucket\tSpecifies the S3 bucket to use to store Vault data. Only used if '--enable-s3-backend' is set."
   echo -e "  --s3-bucket-path\tSpecifies the S3 bucket path to use to store Vault data. Only used if '--enable-s3-backend' is set."
   echo -e "  --s3-bucket-region\tSpecifies the AWS region where '--s3-bucket' lives. Only used if '--enable-s3-backend' is set."
+  echo -e "  --consul-agent-service-registration-address\tSpecifies the address of the Consul agent to communicate with when using a different storage backend, in this case an S3 backend. Only used if '--enable-s3-backend' is set. Default is ${DEFAULT_CONSUL_AGENT_SERVICE_REGISTRATION_ADDRESS}."
   echo -e "  --enable-dynamo-backend\tIf this flag is set, DynamoDB will be enabled as the backend storage (HA)"
   echo -e "  --dynamo-region\tSpecifies the AWS region where --dynamo-table lives.  Only used if '--enable-dynamo-backend is on'"
   echo -e "  --dynamo--table\tSpecifies the DynamoDB table to use for HA Storage.  Only used if '--enable-dynamo-backend is on'"
@@ -236,13 +240,14 @@ function generate_vault_config {
   local -r s3_bucket="$9"
   local -r s3_bucket_path="${10}"
   local -r s3_bucket_region="${11}"
-  local -r enable_dynamo_backend="${12}"
-  local -r dynamo_region="${13}"
-  local -r dynamo_table="${14}"
-  local -r enable_auto_unseal="${15}"
-  local -r auto_unseal_kms_key_id="${16}"
-  local -r auto_unseal_kms_key_region="${17}"
-  local -r auto_unseal_endpoint="${18}"
+  local -r consul_agent_service_registration_address="${12}"
+  local -r enable_dynamo_backend="${13}"
+  local -r dynamo_region="${14}"
+  local -r dynamo_table="${15}"
+  local -r enable_auto_unseal="${16}"
+  local -r auto_unseal_kms_key_id="${17}"
+  local -r auto_unseal_kms_key_region="${18}"
+  local -r auto_unseal_endpoint="${19}"
   local -r config_path="$config_dir/$VAULT_CONFIG_FILE"
 
   local instance_ip_address
@@ -287,6 +292,7 @@ EOF
   local dynamodb_storage_type="storage"
   local s3_config=""
   local vault_storage_backend=""
+  local service_registration=""
   if [[ "$enable_s3_backend" == "true" ]]; then
     s3_config=$(cat <<EOF
 storage "s3" {
@@ -298,8 +304,13 @@ EOF
 )
     consul_storage_type="ha_storage"
     dynamodb_storage_type="ha_storage"
+    service_registration=$(cat <<EOF
+service_registration "consul" {
+  address = "${consul_agent_service_registration_address}"
+}\n
+EOF
+)
   fi
-
 
   if [[ "$enable_dynamo_backend" == "true" ]]; then
     vault_storage_backend=$(cat <<EOF
@@ -334,6 +345,7 @@ EOF
   echo -e "$listener_config" >> "$config_path"
   echo -e "$s3_config" >> "$config_path"
   echo -e "$vault_storage_backend" >> "$config_path"
+  echo -e "$service_registration" >> "$config_path"
 
   chown "$user:$user" "$config_path"
 }
@@ -373,6 +385,8 @@ Documentation=https://www.vaultproject.io/docs/
 Requires=network-online.target
 After=network-online.target
 ConditionFileNotEmpty=$config_path
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 EOF
 )
@@ -397,9 +411,12 @@ KillSignal=SIGINT
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30
+StartLimitInterval=60
 StartLimitIntervalSec=60
 StartLimitBurst=3
 LimitNOFILE=65536
+LimitMEMLOCK=infinity
+
 EOF
 )
 
@@ -444,6 +461,7 @@ function run {
   local api_addr=""
   local config_dir=""
   local bin_dir=""
+  local data_dir=""
   local log_level="$DEFAULT_LOG_LEVEL"
   local systemd_stdout=""
   local systemd_stderr=""
@@ -453,6 +471,7 @@ function run {
   local s3_bucket=""
   local s3_bucket_path=""
   local s3_bucket_region=""
+  local consul_agent_service_registration_address="${DEFAULT_CONSUL_AGENT_SERVICE_REGISTRATION_ADDRESS}"
   local enable_dynamo_backend="false"
   local dynamo_region=""
   local dynamo_table=""
@@ -508,6 +527,11 @@ function run {
         bin_dir="$2"
         shift
         ;;
+      --data-dir)
+        assert_not_empty "$key" "$2"
+        data_dir="$2"
+        shift
+        ;;
       --log-level)
         assert_not_empty "$key" "$2"
         log_level="$2"
@@ -546,6 +570,11 @@ function run {
         s3_bucket_region="$2"
         shift
         ;;
+      --consul-agent-service-registration-address)
+        assert_not_empty "$key" "$2"
+        consul_agent_service_registration_address="$2"
+        shift
+        ;;
       --enable-dynamo-backend)
         enable_dynamo_backend="true"
         ;;
@@ -570,7 +599,7 @@ function run {
         agent_vault_port="$2"
         shift
         ;;
-      --agent-ca-cert_file)
+      --agent-ca-cert-file)
         assert_not_empty "$key" "$2"
         agent_ca_cert_file="$2"
         shift
@@ -638,6 +667,7 @@ function run {
     if [[ "$enable_s3_backend" == "true" ]]; then
       assert_not_empty "--s3-bucket" "$s3_bucket"
       assert_not_empty "--s3-bucket-region" "$s3_bucket_region"
+      assert_not_empty "--consul-agent-service-registration-address" "${consul_agent_service_registration_address}"
     fi
   fi
   
@@ -713,6 +743,7 @@ function run {
         "$s3_bucket" \
         "$s3_bucket_path" \
         "$s3_bucket_region" \
+        "${consul_agent_service_registration_address}" \
         "$enable_dynamo_backend" \
         "$dynamo_region" \
         "$dynamo_table" \

@@ -1,9 +1,11 @@
 # ----------------------------------------------------------------------------------------------------------------------
 # REQUIRE A SPECIFIC TERRAFORM VERSION OR HIGHER
-# This module has been updated with 0.12 syntax, which means it is no longer compatible with any versions below 0.12.
 # ----------------------------------------------------------------------------------------------------------------------
 terraform {
-  required_version = ">= 0.12"
+  # This module is now only being tested with Terraform 1.0.x. However, to make upgrading easier, we are setting
+  # 0.12.26 as the minimum version, as that version added support for required_providers with source URLs, making it
+  # forwards compatible with 1.0.x code.
+  required_version = ">= 0.12.26"
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -21,6 +23,18 @@ resource "aws_elb" "vault" {
 
   security_groups = [aws_security_group.vault.id]
   subnets         = var.subnet_ids
+
+  # optional access_logs creation  
+  dynamic "access_logs" {
+    for_each = var.access_logs == null ? [] : ["once"]
+
+    content {
+      enabled       = lookup(access_logs.value, "enabled", lookup(access_logs.value, "bucket", null))
+      bucket        = lookup(access_logs.value, "bucket", null)
+      bucket_prefix = lookup(access_logs.value, "bucket_prefix", null)
+      interval      = lookup(access_logs.value, "interval", null)
+    }
+  }
 
   # Run the ELB in TCP passthrough mode
   listener {
@@ -109,4 +123,3 @@ resource "aws_route53_record" "vault_elb" {
     evaluate_target_health = false
   }
 }
-

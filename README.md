@@ -57,9 +57,8 @@ To deploy the Vault cluster:
    module](https://github.com/hashicorp/terraform-aws-consul/tree/master/modules/install-consul)). Here is an
    [example Packer template](https://github.com/hashicorp/terraform-aws-vault/tree/master/examples/vault-consul-ami).
 
-   If you are just experimenting with this Module, you may find it more convenient to use one of our official public AMIs:
-   - [Latest Ubuntu 16 AMIs](https://github.com/hashicorp/terraform-aws-vault/tree/master/_docs/ubuntu16-ami-list.md).
-   - [Latest Amazon Linux 2 AMIs](https://github.com/hashicorp/terraform-aws-vault/tree/master/_docs/amazon-linux-ami-list.md).
+   If you are just experimenting with this Module, you may find it more convenient to use one of our official public AMIs.
+   Check out the `aws_ami` data source usage in `main.tf` for how to auto-discover this AMI.
 
    **WARNING! Do NOT use these AMIs in your production setup. In production, you should build your own AMIs in your
      own AWS account.**
@@ -140,4 +139,4 @@ MINOR, and PATCH versions on each release to indicate any incompatibilities.
 This code is released under the Apache 2.0 License. Please see [LICENSE](https://github.com/hashicorp/terraform-aws-vault/tree/master/LICENSE) and [NOTICE](https://github.com/hashicorp/terraform-aws-vault/tree/master/NOTICE) for more
 details.
 
-Copyright &copy; 2017 Gruntwork, Inc.
+Copyright &copy; 2020 Gruntwork, Inc.
